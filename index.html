@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Doors of Greed</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+    :root {
+        --bg: #0d001a; --card: #1a0033; --gold: #ffeb8c; --purple: #bb88ff;
+        --green: #00ff9d; --red: #ff3355; --low: #334455;
+    }
+    body {
+        margin:0; height:100vh; background: var(--bg); color: white;
+        font-family: 'Segoe UI', sans-serif; display:flex; flex-direction:column;
+        overflow:hidden; background: radial-gradient(circle at center, #1a0033, #000);
+    }
+    .header {
+        text-align:center; padding:15px; font-size:28px; font-weight:bold;
+        background: rgba(0,0,0,0.5); letter-spacing:4px; text-shadow: 0 0 20px var(--purple);
+    }
+    .game {
+        flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:25px;
+    }
+    .pot {
+        font-size:52px; font-weight:bold; color:var(--gold);
+        text-shadow: 0 0 30px #ff0; animation: glow 2s infinite alternate;
+    }
+    @keyframes glow { from {text-shadow:0 0 20px #ff0} to {text-shadow:0 0 40px #ff0} }
+    .doors {
+        display:flex; gap:30px; flex-wrap:wrap; justify-content:center;
+    }
+    .door {
+        width:160px; height:240px; background: var(--card); border-radius:20px;
+        border: 4px solid #333; cursor:pointer; position:relative; overflow:hidden;
+        transition:all 0.4s; box-shadow:0 15px 40px rgba(0,0,0,0.8);
+        display:flex; align-items:center; justify-content:center; font-size:36px; font-weight:bold;
+        color:var(--gold);
+    }
+    .door:hover { transform:translateY(-20px) scale(1.08); border-color:var(--purple); }
+    .door.high { animation: pulse 1.8s infinite; border-color:#ff00aa; }
+    @keyframes pulse { 0%,100% {box-shadow:0 0 20px #ff00aa} 50% {box-shadow:0 0 50px #ff00ff} }
+    .door.reveal-safe { background:#002211; border-color:var(--green); animation:safe 1s; }
+    .door.reveal-monster { background:#220011; border-color:var(--red); animation:monster 1s; }
+    @keyframes safe { to {transform:rotateY(360deg) scale(1.3)} }
+    @keyframes monster { to {transform:rotateY(360deg) scale(1.3)} }
+    .btn {
+        padding:16px 50px; font-size:26px; background:var(--purple); border:none;
+        border-radius:50px; color:white; cursor:pointer; font-weight:bold;
+        box-shadow:0 10px 30px rgba(187,136,255,0.6);
+        animation: shake 4s infinite;
+    }
+    .btn:hover { transform:scale(1.1); background:#e040fb; }
+    @keyframes shake { 0%,100% {transform:translateX(0)} 10%,30%,50%,70% {transform:translateX(-10px)} 20%,40%,60%,80% {transform:translateX(10px)} }
+    .status { font-size:24px; min-height:40px; }
+    .input { padding:12px; font-size:20px; width:120px; text-align:center; border-radius:10px; border:none; }
+</style>
+</head>
+<body>
+
+<div class="header">DOORS OF GREED</div>
+
+<div class="game">
+    <div class="status" id="status">Enter bet and click START</div>
+    <div class="pot" id="pot">0.00 TND</div>
+
+    <div id="start-screen">
+        <input type="number" id="bet-input" value="100" class="input" min="1">
+        <button class="btn" onclick="startGame()">START GAME</button>
+    </div>
+
+    <div class="doors" id="doors"></div>
+
+    <button class="btn" id="cashout-btn" onclick="cashout()" style="display:none; margin-top:20px;">
+        CASHOUT <span id="cashout-amount">0.00</span> TND
+    </button>
+</div>
+
+<script>
+// ====== GAME STATE ======
+let bet = 100, pot = 0, round = 1;
+let gameActive = false;
+
+// ====== CORE ALGORITHM (your exact rules) ======
+function generateRound() {
+    const doorCount = round <= 2 ? (Math.random() < 0.75 ? 2 : 3) :
+                     round >= 8 ? (Math.random() < 0.5 ? 3 : 4) :
+                     (Math.random() < 0.65 ? 3 : 4);
+
+    // Safe multiplier: 1.01x → 1.80x, HEAVILY skewed to low end
+    let maxSafe = 1.80;
+    if (round <= 2) maxSafe = Math.random() < 0.15 ? 3.0 : 2.4;
+    if (pot > bet * 30) maxSafe = Math.min(maxSafe, 1.45);
+    if (pot > bet * 100) maxSafe = 1.25;
+
+    // Triangular distribution → 80%+ chance < 1.35x
+    const safeMult = +(Math.random() * Math.random() * (maxSafe - 1.01) + 1.01).toFixed(2);
+
+    const safeIndex = Math.floor(Math.random() * doorCount);
+    const doors = [];
+
+    for (let i = 0; i < doorCount; i++) {
+        if (i === safeIndex) {
+            doors.push({ mult: safeMult, safe: true });
+        } else {
+            // 30% chance monster is LOW (1.00–1.18) → hides pattern!
+            if (Math.random() < 0.30) {
+                const lowBait = +(1.00 + Math.random() * 0.18).toFixed(2);
+                doors.push({ mult: lowBait, safe: false });
+            }
+            // Greed bait (only when player has decent pot)
+            else if (pot > bet * 8 && Math.random() < 0.55) {
+                const high = round < 5 ? [3.2,4.1,5.5,7.0,9.9] : [3.8,5.2,7.7,11.1,16.6,20.0];
+                doors.push({ mult: high[Math.floor(Math.random()*high.length)], safe: false });
+            }
+            else {
+                doors.push({ mult: +(1.10 + Math.random() * 1.2).toFixed(2), safe: false });
+            }
+        }
+    }
+
+    // Shuffle
+    for (let i = doors.length-1; i > 0; i--) {
+        const j = Math.floor(Math.random()*(i+1));
+        [doors[i], doors[j]] = [doors[j], doors[i]];
+    }
+    return doors;
+}
+
+// ====== UI & GAME LOOP ======
+function startGame() {
+    bet = parseFloat(document.getElementById("bet-input").value) || 100;
+    pot = bet; round = 1; gameActive = true;
+    document.getElementById("start-screen").style.display = "none";
+    document.getElementById("cashout-btn").style.display = "block";
+    document.getElementById("status").textContent = "Round 1 – Choose a door";
+    updatePot();
+    showDoors();
+}
+
+function showDoors() {
+    const doorsDiv = document.getElementById("doors");
+    doorsDiv.innerHTML = "";
+    const doors = generateRound();
+
+    doors.forEach((door, i) => {
+        const d = document.createElement("div");
+        d.className = "door" + (door.mult >= 5 ? " high" : "");
+        d.textContent = door.mult.toFixed(2) + "x";
+        d.onclick = () => pickDoor(i, doors, d);
+        doorsDiv.appendChild(d);
+    });
+}
+
+function pickDoor(index, doors, clickedElement) {
+    if (!gameActive) return;
+    gameActive = false;
+
+    const allDoors = document.querySelectorAll(".door");
+    allDoors.forEach((el, i) => {
+        setTimeout(() => {
+            if (i === index) {
+                if (doors[i].safe) {
+                    el.classList.add("reveal-safe");
+                    el.innerHTML += "<br>SAFE!";
+                    pot = +(pot * doors[i].mult).toFixed(2);
+                    updatePot();
+                    round++;
+                    setTimeout(() => {
+                        gameActive = true;
+                        document.getElementById("status").textContent = `Round ${round} – Keep going or cashout?`;
+                        showDoors();
+                    }, 1200);
+                } else {
+                    el.classList.add("reveal-monster");
+                    el.innerHTML = "MONSTER<br>LOST!";
+                    setTimeout(() => alert("MONSTER! You lost everything!"), 800);
+                    endGame();
+                }
+            } else if (!doors[i].safe) {
+                el.classList.add("reveal-monster");
+            }
+        }, 300 + i*150);
+    });
+}
+
+function cashout() {
+    alert(`CASHED OUT!\nYou walk away with ${pot.toFixed(2)} TND`);
+    endGame();
+}
+
+function endGame() {
+    gameActive = false;
+    document.getElementById("cashout-btn").style.display = "none";
+    document.getElementById("start-screen").style.display = "block";
+    document.getElementById("status").textContent = pot > bet*3 ? "Great run!" : "Try again... you're close!";
+}
+
+function updatePot() {
+    document.getElementById("pot").textContent = pot.toFixed(2) + " TND";
+    document.getElementById("cashout-amount").textContent = pot.toFixed(2);
+}
+</script>
+
+</body>
+</html>
