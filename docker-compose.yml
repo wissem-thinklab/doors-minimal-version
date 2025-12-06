@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  doorsgame:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: doorsgame
+    restart: unless-stopped
+    ports:
+      - "8081:80"
